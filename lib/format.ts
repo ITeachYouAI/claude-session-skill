@@ -1,10 +1,13 @@
 import type { SessionEntry } from "./indexer";
-
-const HOME = process.env.HOME || "/Users/tim";
+import { isGarbageSummary } from "./indexer";
 
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
-  return s.slice(0, max - 3) + "...";
+  // Use Array.from to split by code points, not UTF-16 code units.
+  // This prevents splitting surrogate pairs (emoji, CJK, etc.)
+  const chars = Array.from(s);
+  if (chars.length <= max) return s;
+  return chars.slice(0, max - 3).join("") + "...";
 }
 
 function formatDate(ts: number): string {
@@ -18,20 +21,6 @@ function formatDate(ts: number): string {
   const ampm = hours >= 12 ? "PM" : "AM";
   const h = hours % 12 || 12;
   return `${month} ${day}, ${h}:${mins} ${ampm}`;
-}
-
-function isGarbageSummary(s: string): boolean {
-  if (!s) return true;
-  const lower = s.toLowerCase();
-  return (
-    lower.startsWith("i don't have") ||
-    lower.startsWith("i don't see") ||
-    lower.startsWith("i'm afraid") ||
-    lower.startsWith("i cannot") ||
-    lower.startsWith("(80 chars max)") ||
-    lower.includes("don't have a transcript") ||
-    lower.includes("don't have access")
-  );
 }
 
 // Get single-line display for list view — first bullet or last message

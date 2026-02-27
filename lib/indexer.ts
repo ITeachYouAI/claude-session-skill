@@ -1,4 +1,4 @@
-import { readdir, stat, mkdir, rename } from "fs/promises";
+import { readdir, stat, mkdir, rename, unlink } from "fs/promises";
 import { join, basename } from "path";
 
 const CLAUDE_DIR = join(process.env.HOME!, ".claude");
@@ -64,7 +64,7 @@ function isTopical(msg: string): boolean {
   return true;
 }
 
-function isGarbageSummary(s: string): boolean {
+export function isGarbageSummary(s: string): boolean {
   if (!s) return true;
   const lower = s.toLowerCase();
   return (
@@ -136,15 +136,23 @@ async function saveSummaries(summaries: SummariesCache): Promise<void> {
 
 type NamesCache = Record<string, string>;
 
+// In-memory cache for names with mtime check
+let _namesCache: NamesCache | null = null;
+let _namesMtime: number = 0;
+
 async function loadNames(): Promise<NamesCache> {
   try {
+    const currentMtime = (await stat(NAMES_FILE)).mtimeMs;
+    if (_namesCache && currentMtime === _namesMtime) return { ..._namesCache };
     const raw = JSON.parse(await Bun.file(NAMES_FILE).text());
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
     const cleaned: NamesCache = {};
     for (const [k, v] of Object.entries(raw)) {
       if (typeof v === "string") cleaned[k] = v;
     }
-    return cleaned;
+    _namesCache = cleaned;
+    _namesMtime = currentMtime;
+    return { ...cleaned };
   } catch {
     return {};
   }
@@ -153,6 +161,38 @@ async function loadNames(): Promise<NamesCache> {
 async function saveNames(names: NamesCache): Promise<void> {
   await ensureDataDir();
   await atomicWrite(NAMES_FILE, JSON.stringify(names));
+  // Invalidate mtime cache so next load picks up the write
+  _namesCache = null;
+  _namesMtime = 0;
+}
+
+const LOCK_FILE = NAMES_FILE + ".lock";
+const LOCK_TIMEOUT = 5000; // 5 seconds
+
+async function acquireLock(): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < LOCK_TIMEOUT) {
+    try {
+      // O_EXCL semantics — fails if file exists
+      await Bun.write(LOCK_FILE, String(process.pid), { createNew: true } as any);
+      return true;
+    } catch {
+      // Check if lock is stale (older than 10s)
+      try {
+        const lockStat = await stat(LOCK_FILE);
+        if (Date.now() - lockStat.mtimeMs > 10000) {
+          await unlink(LOCK_FILE).catch(() => {});
+          continue;
+        }
+      } catch {}
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  return false;
+}
+
+async function releaseLock(): Promise<void> {
+  await unlink(LOCK_FILE).catch(() => {});
 }
 
 export async function nameSession(sessionId: string, name: string): Promise<{ ok: boolean; fullId?: string; error?: string }> {
@@ -172,12 +212,45 @@ export async function nameSession(sessionId: string, name: string): Promise<{ ok
 
   const match = matches[0];
 
-  // Load fresh names right before write to minimize race window
-  const names = await loadNames();
-  names[match.id] = trimmed;
-  await saveNames(names);
+  // Advisory lock to prevent concurrent write corruption
+  const locked = await acquireLock();
+  if (!locked) return { ok: false, error: "Could not acquire lock. Another naming operation may be in progress." };
 
-  return { ok: true, fullId: match.id };
+  try {
+    // Load fresh names inside lock to prevent race
+    const names = await loadNames();
+    names[match.id] = trimmed;
+    await saveNames(names);
+    return { ok: true, fullId: match.id };
+  } finally {
+    await releaseLock();
+  }
+}
+
+export async function clearSessionName(sessionId: string): Promise<{ ok: boolean; fullId?: string; error?: string }> {
+  const cache = await loadCache();
+  if (!cache) return { ok: false, error: "No index found. Run `/session list` first." };
+
+  const matches = cache.sessions.filter(
+    (s) => s.id === sessionId || s.id.startsWith(sessionId)
+  );
+  if (matches.length === 0) return { ok: false, error: `No session found matching "${sessionId}"` };
+  if (matches.length > 1) return { ok: false, error: `Ambiguous prefix "${sessionId}" matches ${matches.length} sessions. Provide more characters.` };
+
+  const match = matches[0];
+
+  const locked = await acquireLock();
+  if (!locked) return { ok: false, error: "Could not acquire lock." };
+
+  try {
+    const names = await loadNames();
+    if (!names[match.id]) return { ok: false, error: `Session ${match.id.slice(0, 8)}... has no name to clear.` };
+    delete names[match.id];
+    await saveNames(names);
+    return { ok: true, fullId: match.id };
+  } finally {
+    await releaseLock();
+  }
 }
 
 // Extract conversation messages from session file — prioritize LAST messages

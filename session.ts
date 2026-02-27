@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { buildIndex, nameSession } from "./lib/indexer";
+import { buildIndex, nameSession, clearSessionName } from "./lib/indexer";
 import { searchSessions } from "./lib/search";
 import {
   formatSessionList,
@@ -90,6 +90,46 @@ async function main() {
       break;
     }
 
+    case "unname":
+    case "clear-name": {
+      const rest = args.slice(1);
+      let sessionId: string;
+
+      if (rest.length === 0) {
+        // Clear name from most recent session
+        const sessions = await buildIndex();
+        if (sessions.length === 0) {
+          console.error("No sessions found.");
+          process.exit(1);
+        }
+        sessionId = sessions[0].id;
+      } else {
+        const first = rest[0];
+        const looksLikeId = /^[0-9a-f]{8}(-[0-9a-f]{4}(-[0-9a-f]{4}(-[0-9a-f]{4}(-[0-9a-f]{12})?)?)?)?$/i.test(first);
+        if (looksLikeId) {
+          sessionId = first;
+        } else {
+          // Search by keyword, clear name from top result
+          const sessions = await buildIndex();
+          const { searchSessions: search } = await import("./lib/search");
+          const results = search(sessions, rest.join(" "));
+          if (results.length === 0) {
+            console.error(`No session found matching "${rest.join(" ")}"`);
+            process.exit(1);
+          }
+          sessionId = results[0].id;
+        }
+      }
+
+      const result = await clearSessionName(sessionId);
+      if (!result.ok) {
+        console.error(result.error);
+        process.exit(1);
+      }
+      console.log(`Cleared name from session ${(result.fullId ?? "").slice(0, 8)}...`);
+      break;
+    }
+
     case "search": {
       const query = args.slice(1).join(" ");
       if (!query) {
@@ -117,6 +157,7 @@ async function main() {
   session show <id>        Show session details (partial ID ok)
   session name <name>      Name the most recent session
   session name <id> <name> Name a specific session (partial ID ok)
+  session unname [<id>]    Clear a session's name
   session search <query>   Search sessions by keyword
   session rebuild          Force rebuild the index
   session stats            Show index statistics`);

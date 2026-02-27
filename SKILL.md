@@ -11,6 +11,8 @@ triggers:
   - session name
   - name this session
   - call this session
+  - unname session
+  - clear session name
 ---
 
 # Session Tracker Skill
@@ -22,8 +24,9 @@ triggers:
 /session list                    # Show 20 most recent sessions
 /session list --all              # Show all sessions
 /session show <id>               # Full details (supports partial IDs)
-/session name <name>             # Name the current/most recent session
+/session name <name>             # Name the most recent session (by last activity)
 /session name <id> <name>        # Name a specific session by ID
+/session unname [<id>]           # Clear a session's name
 /session rebuild                 # Force rebuild the index
 /session stats                   # Index statistics by project
 ```
@@ -44,13 +47,15 @@ Users name sessions in natural language. They will NEVER type IDs. Your job is t
 
 **How to handle naming requests:**
 
-1. **"Name this session X"** / **"Call this session X"** — Name the current session. Run: `session.ts name "<name>"`
+1. **"Name this session X"** / **"Call this session X"** — Name the most recent session (by last activity). Run: `session.ts name "<name>"`
 2. **"Name the session where I worked on the clinic bot"** — First search (`session.ts search "clinic bot"`), identify the right session from results, then name it by ID (`session.ts name <id> "<name>"`). The user never sees or types the ID — you resolve it.
-3. **"Name my last session X"** — Run: `session.ts name "<name>"` (defaults to most recent)
+3. **"Name my last session X"** — Run: `session.ts name "<name>"` (defaults to most recent by last activity)
 4. **After `/session list`**, user says **"name the third one X"** — You already have the list output with IDs. Use the ID from the third entry.
+5. **"Clear the name from X"** / **"Unname the clinic bot session"** — Search to find it, then run: `session.ts unname <id>`. Or `session.ts unname` to clear the most recent.
 
 **Key rules:**
 - The user NEVER types or sees session IDs. You handle all ID resolution behind the scenes.
 - Names are 1-50 characters. If the user gives something longer, ask them to shorten it.
 - Named sessions show as `Name — summary` in list view and `Name: X` in detail view.
 - Names are searchable — `/session search "Vault Reorg"` finds named sessions with highest relevance.
+- Names can be cleared with `unname` — this removes the name but preserves the AI summary.

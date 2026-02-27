@@ -19,6 +19,7 @@ Claude Code stores session transcripts as JSONL files but provides no way to sea
 /session show <id>               # Full details (partial IDs work)
 /session name <name>             # Name the most recent session
 /session name <id> <name>        # Name a specific session
+/session unname [<id>]           # Clear a session's name
 /session search <query>          # Search by keyword
 /session <query>                 # Shorthand for search
 /session rebuild                 # Force rebuild the index
@@ -62,11 +63,15 @@ Names are stored separately from summaries. Names never get overwritten by index
 ## Production hardening
 
 - Atomic writes (temp + rename) prevent corruption on interrupted saves
+- Advisory file locking on name operations prevents concurrent write corruption
+- Mtime-based in-memory cache for names — avoids redundant disk reads on hot path
+- Surrogate-safe string truncation — emoji and CJK characters never split mid-codepoint
 - Data directory auto-created on first run
 - JSON validation on load — corrupted files gracefully fall back to empty state
 - Ambiguous partial IDs rejected with clear error messages
 - UUID-format regex prevents false positives on hex-like session names
 - Names capped at 50 characters, empty/whitespace rejected
+- Stale lock detection (10s timeout) prevents deadlocks from crashed processes
 
 ## Requirements
 
