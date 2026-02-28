@@ -40,8 +40,14 @@ Claude Code already saves every user message to `~/.claude/history.jsonl` with s
 Entry point: `bun run ~/.claude/skills/session/session.ts <command> [args]`
 
 **CRITICAL OUTPUT RULES — read before running anything:**
-1. **Print the FULL command output verbatim.** Do NOT summarize, paraphrase, truncate, or reformat it. The skill handles all formatting. Your job is to relay what it prints, nothing more.
-2. **Do NOT add commentary** after the output. No "What do you need?", no "Here are your sessions:", no interpretation. Just the raw output.
+1. **Print the FULL command output verbatim, inside a fenced code block.** Wrap ALL output in triple backticks so it renders exactly as-is. Like this:
+   ````
+   ```
+   <raw output here>
+   ```
+   ````
+   Do NOT summarize, paraphrase, truncate, or reformat it. Do NOT shorten session IDs — they are full UUIDs and must be shown in full. The skill handles all formatting. Your only job is to relay what it prints, nothing more.
+2. **Do NOT add commentary** after the output. No "What do you need?", no "Here are your sessions:", no interpretation. Just the code block.
 3. **Do NOT ask follow-up questions** after `list` or `search`. The output is self-contained.
 4. **If the user references an already-shown list** (e.g., "the most recent", "the third one", "that one") — use the IDs already printed in the previous output. Do NOT re-run `list` or `show` unnecessarily.
 
