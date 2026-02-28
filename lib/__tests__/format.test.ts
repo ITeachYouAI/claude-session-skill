@@ -64,6 +64,16 @@ describe("formatSessionList", () => {
     const output = formatSessionList([makeSession({ name: "Auth Fix" })], true);
     expect(output).toContain("Auth Fix");
   });
+
+  test("shows resume command in list view", () => {
+    const output = formatSessionList([makeSession()], true);
+    expect(output).toContain("cd /Users/tim/projects/my-project && claude --resume abcdef1234567890");
+  });
+
+  test("omits resume line when cwd is empty in list", () => {
+    const output = formatSessionList([makeSession({ cwd: "" })], true);
+    expect(output).not.toContain("claude --resume");
+  });
 });
 
 describe("formatSearchResults", () => {
@@ -87,6 +97,11 @@ describe("formatSearchResults", () => {
   test("shows git branch when present", () => {
     const output = formatSearchResults([makeSession({ gitBranch: "feat/login" })], "auth");
     expect(output).toContain("feat/login");
+  });
+
+  test("shows resume command in search results", () => {
+    const output = formatSearchResults([makeSession()], "auth");
+    expect(output).toContain("cd /Users/tim/projects/my-project && claude --resume abcdef1234567890");
   });
 });
 
@@ -130,6 +145,16 @@ describe("formatSessionDetail", () => {
     const output = formatSessionDetail(makeSession({ gitBranch: "" }));
     expect(output).not.toContain("Branch:");
   });
+
+  test("shows resume command with cd and session id", () => {
+    const output = formatSessionDetail(makeSession());
+    expect(output).toContain("cd /Users/tim/projects/my-project && claude --resume abcdef1234567890");
+  });
+
+  test("omits resume line when cwd is empty", () => {
+    const output = formatSessionDetail(makeSession({ cwd: "" }));
+    expect(output).not.toContain("claude --resume");
+  });
 });
 
 describe("formatStats", () => {
@@ -154,5 +179,70 @@ describe("formatStats", () => {
     const bigIdx = output.indexOf("big");
     const smallIdx = output.indexOf("small");
     expect(bigIdx).toBeLessThan(smallIdx);
+  });
+});
+
+// ── formatDate edge cases (via formatSessionList) ─────────────────────────────
+
+describe("formatDate edge cases (via formatSessionList)", () => {
+  test("ts=0 renders as 'unknown'", () => {
+    const session = makeSession({ lastTimestamp: 0, firstTimestamp: 0 });
+    const output = formatSessionList([session], true);
+    expect(output).toContain("unknown");
+  });
+
+  test("ts=undefined-like (NaN) renders as 'unknown'", () => {
+    const session = makeSession({ lastTimestamp: NaN, firstTimestamp: NaN });
+    const output = formatSessionList([session], true);
+    expect(output).toContain("unknown");
+  });
+
+  test("non-zero timestamp renders a real date", () => {
+    const session = makeSession({ lastTimestamp: 1709000000000 });
+    const output = formatSessionList([session], true);
+    // Should contain a month name, not "unknown"
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    expect(months.some((m) => output.includes(m))).toBe(true);
+    expect(output).not.toContain("unknown");
+  });
+});
+
+// ── truncate edge cases (via formatSessionList label) ─────────────────────────
+
+describe("truncate edge cases (via formatSessionList)", () => {
+  test("emoji string truncated by code points, not bytes", () => {
+    // 4-byte emoji × 35 = 140 bytes but 35 code points → fits in max=100
+    const emojiStr = "🔥".repeat(35); // 35 chars (code points), 140 UTF-16 units
+    const session = makeSession({ topic: `- ${emojiStr}`, lastMessage: "" });
+    const output = formatSessionList([session], true);
+    // Should not crash and should contain emoji
+    expect(output).toContain("🔥");
+  });
+
+  test("long string beyond 100 chars gets truncated with ellipsis", () => {
+    const longLabel = "a".repeat(120);
+    const session = makeSession({ topic: `- ${longLabel}`, lastMessage: "" });
+    const output = formatSessionList([session], true);
+    expect(output).toContain("...");
+  });
+
+  test("CJK characters counted by code points", () => {
+    // CJK chars are BMP (single UTF-16 code unit) but Array.from still counts them correctly
+    // "- " (2 chars) + 101 CJK chars = 103 code points > 100 limit → truncated
+    const cjkStr = "中".repeat(101);
+    const session = makeSession({ topic: `- ${cjkStr}`, lastMessage: "" });
+    const output = formatSessionList([session], true);
+    expect(output).toContain("...");
+  });
+
+  test("string exactly at max length (100) is not truncated", () => {
+    const exactStr = "a".repeat(98); // 98 chars + "- " prefix = 100 char label
+    const session = makeSession({ topic: `- ${exactStr}`, lastMessage: "" });
+    const output = formatSessionList([session], true);
+    // Should NOT add ellipsis since it's exactly at the limit
+    // The label is "- " + 98 chars = 100 chars, which should not be truncated
+    const lines = output.split("\n").filter((l) => l.startsWith("  "));
+    const labelLine = lines[0];
+    expect(labelLine).not.toContain("...");
   });
 });

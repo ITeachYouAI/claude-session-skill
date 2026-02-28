@@ -1,12 +1,12 @@
 {
   "name": "claude-session-skill",
-  "version": "1.0.0",
-  "description": "Search, browse, and resume past Claude Code sessions with AI-generated summaries",
+  "version": "1.1.4",
+  "description": "Search, browse, and resume past Claude Code sessions with AI-generated summaries — plus an MCP server for any MCP-compatible client",
   "author": "ITeachYouAI <engineering@iteachyouai.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ITeachYouAI/claude-session-skill.git"
+    "url": "git+https://github.com/ITeachYouAI/claude-session-skill.git"
   },
   "homepage": "https://github.com/ITeachYouAI/claude-session-skill",
   "bugs": {
@@ -21,16 +21,39 @@
     "bun",
     "anthropic",
     "ai",
-    "developer-tools"
+    "developer-tools",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "session-history"
   ],
   "type": "module",
   "main": "session.ts",
+  "bin": {
+    "claude-session": "bin/claude-session",
+    "claude-session-mcp": "bin/claude-session-mcp"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "lib/",
+    "session.ts",
+    "mcp-server.ts",
+    "SKILL.md",
+    "README.md"
+  ],
   "scripts": {
     "start": "bun run session.ts",
     "test": "bun test",
     "typecheck": "bun x tsc --noEmit",
+    "build": "bun build session.ts --outdir dist --target node && bun build mcp-server.ts --outdir dist --target node && node -e \"const fs=require('fs');['dist/session.js','dist/mcp-server.js'].forEach(f=>{const c=fs.readFileSync(f,'utf8');if(!c.startsWith('#!'))fs.writeFileSync(f,'#!/usr/bin/env node\\n'+c);fs.chmodSync(f,0o755)})\"",
+    "prepublishOnly": "bun test && bun run typecheck && bun run build",
     "list": "bun run session.ts list",
     "rebuild": "bun run session.ts rebuild"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "bun-types": "latest",

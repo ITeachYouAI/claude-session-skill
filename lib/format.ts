@@ -75,6 +75,9 @@ export function formatSessionList(sessions: SessionEntry[], showAll: boolean): s
     if (lastMsg) {
       lines.push(`  Left off: "${truncate(lastMsg, 90)}"`);
     }
+    if (s.cwd) {
+      lines.push(`  Resume:   cd ${s.cwd} && claude --resume ${s.id}`);
+    }
     lines.push("");
   }
 
@@ -105,7 +108,10 @@ export function formatSearchResults(sessions: SessionEntry[], query: string): st
       lines.push(`  Left off: "${truncate(lastMsg, 90)}"`);
     }
     if (s.gitBranch) {
-      lines.push(`  Branch: ${s.gitBranch}`);
+      lines.push(`  Branch:   ${s.gitBranch}`);
+    }
+    if (s.cwd) {
+      lines.push(`  Resume:   cd ${s.cwd} && claude --resume ${s.id}`);
     }
     lines.push("");
   }
@@ -134,6 +140,11 @@ export function formatSessionDetail(session: SessionEntry): string {
   lines.push("");
   if (s.lastMessage) {
     lines.push(`Left off: "${s.lastMessage.slice(0, 300)}"`);
+    lines.push("");
+  }
+  if (s.cwd) {
+    lines.push(`Resume with:`);
+    lines.push(`  cd ${s.cwd} && claude --resume ${s.id}`);
     lines.push("");
   }
 
