@@ -1,7 +1,19 @@
 import { readdir, stat, mkdir, rename, unlink } from "fs/promises";
 import { join, basename } from "path";
 
-const CLAUDE_DIR = join(process.env.HOME!, ".claude");
+const HOME = process.env.HOME;
+if (!HOME) {
+  throw new Error("HOME environment variable is not set");
+}
+
+const SUMMARY_MODEL = process.env.SESSION_SUMMARY_MODEL || "claude-haiku-4-5-20251001";
+const DEBUG = Boolean(process.env.SESSION_DEBUG);
+
+function debug(msg: string): void {
+  if (DEBUG) process.stderr.write(`[session] ${msg}\n`);
+}
+
+const CLAUDE_DIR = join(HOME, ".claude");
 const HISTORY_FILE = join(CLAUDE_DIR, "history.jsonl");
 const PROJECTS_DIR = join(CLAUDE_DIR, "projects");
 const DATA_DIR = join(CLAUDE_DIR, "skills", "session", "data");
@@ -28,6 +40,7 @@ export interface SessionEntry {
 interface CacheMeta {
   historyMtime: number;
   sessionFileCount: number;
+  maxSessionMtime: number;
   builtAt: number;
 }
 
@@ -45,18 +58,17 @@ async function ensureDataDir(): Promise<void> {
   dataDirReady = true;
 }
 
-function shortProject(project: string): string {
-  const home = process.env.HOME!;
-  if (!project || project === home) return "~";
-  let p = project.startsWith(home) ? project.slice(home.length + 1) : project;
+export function shortProject(project: string): string {
+  if (!project || project === HOME) return "~";
+  const p = project.startsWith(HOME!) ? project.slice(HOME!.length + 1) : project;
   return p || "~";
 }
 
-function decodeProjectDir(dirName: string): string {
+export function decodeProjectDir(dirName: string): string {
   return "/" + dirName.replace(/^-/, "").replace(/-/g, "/");
 }
 
-function isTopical(msg: string): boolean {
+export function isTopical(msg: string): boolean {
   if (msg.length < 5) return false;
   if (msg.startsWith("/")) return false;
   if (msg.startsWith("<")) return false;
@@ -81,23 +93,44 @@ export function isGarbageSummary(s: string): boolean {
 async function getHistoryMtime(): Promise<number> {
   try {
     return (await stat(HISTORY_FILE)).mtimeMs;
-  } catch {
+  } catch (e) {
+    debug(`Cannot stat history file: ${(e as Error).message}`);
     return 0;
   }
 }
 
-async function countSessionFiles(): Promise<number> {
+interface SessionFilesFingerprint {
+  count: number;
+  maxMtime: number;
+}
+
+async function getSessionFilesFingerprint(): Promise<SessionFilesFingerprint> {
   let count = 0;
+  let maxMtime = 0;
   try {
     const dirs = await readdir(PROJECTS_DIR);
     for (const dir of dirs) {
       try {
-        const files = await readdir(join(PROJECTS_DIR, dir));
-        count += files.filter((f) => f.endsWith(".jsonl")).length;
-      } catch {}
+        const dirPath = join(PROJECTS_DIR, dir);
+        const files = await readdir(dirPath);
+        for (const f of files) {
+          if (!f.endsWith(".jsonl")) continue;
+          count++;
+          try {
+            const info = await stat(join(dirPath, f));
+            if (info.mtimeMs > maxMtime) maxMtime = info.mtimeMs;
+          } catch (e) {
+            debug(`Cannot stat ${dir}/${f}: ${(e as Error).message}`);
+          }
+        }
+      } catch (e) {
+        debug(`Cannot read project dir ${dir}: ${(e as Error).message}`);
+      }
     }
-  } catch {}
-  return count;
+  } catch (e) {
+    debug(`Cannot read projects dir: ${(e as Error).message}`);
+  }
+  return { count, maxMtime };
 }
 
 async function loadCache(): Promise<CacheFile | null> {
@@ -254,7 +287,7 @@ export async function clearSessionName(sessionId: string): Promise<{ ok: boolean
 }
 
 // Extract conversation messages from session file — prioritize LAST messages
-function extractConversation(text: string, maxMessages = 40): string[] {
+export function extractConversation(text: string, maxMessages = 40): string[] {
   const lines = text.split("\n").filter(Boolean);
   const allMessages: string[] = [];
 
@@ -292,12 +325,19 @@ function extractConversation(text: string, maxMessages = 40): string[] {
           }
         }
       }
-    } catch {}
+    } catch (e) {
+      debug(`Malformed JSONL line: ${(e as Error).message}`);
+    }
   }
 
-  // Take LAST 50 messages — that's where the real work is
+  // Take LAST N messages — that's where the real work is
   if (allMessages.length <= maxMessages) return allMessages;
   return allMessages.slice(-maxMessages);
+}
+
+interface AnthropicResponse {
+  content?: Array<{ type: string; text?: string }>;
+  error?: { type: string; message: string };
 }
 
 // Call Haiku to summarize a session — returns 5 bullet points
@@ -306,7 +346,10 @@ async function summarizeSession(
   conversation: string[]
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return "";
+  if (!apiKey) {
+    debug("ANTHROPIC_API_KEY not set, skipping summarization");
+    return "";
+  }
 
   const transcript = conversation.join("\n").slice(0, 6000);
   if (transcript.length < 50) return "";
@@ -320,7 +363,7 @@ async function summarizeSession(
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: SUMMARY_MODEL,
         max_tokens: 250,
         messages: [
           {
@@ -338,9 +381,18 @@ ${transcript}`,
       }),
     });
 
-    if (!res.ok) return "";
+    if (!res.ok) {
+      if (res.status === 429) {
+        process.stderr.write("[session] Rate limited by Anthropic API, slowing down\n");
+      } else if (res.status === 401) {
+        process.stderr.write("[session] Invalid ANTHROPIC_API_KEY\n");
+      } else {
+        debug(`API returned ${res.status}: ${res.statusText}`);
+      }
+      return "";
+    }
 
-    const data = (await res.json()) as any;
+    const data: AnthropicResponse = await res.json();
     let text = data.content?.[0]?.text?.trim() || "";
     // Strip markdown formatting
     text = text.replace(/^\*\*(.+)\*\*$/gm, "$1");
@@ -356,7 +408,8 @@ ${transcript}`,
       .filter((l: string) => l.startsWith("- "))
       .slice(0, 5);
     return bullets.join("\n") || "";
-  } catch {
+  } catch (e) {
+    debug(`API call failed: ${(e as Error).message}`);
     return "";
   }
 }
@@ -408,9 +461,13 @@ async function parseHistory(): Promise<Map<string, SessionEntry>> {
             gitBranch: "",
           });
         }
-      } catch {}
+      } catch (e) {
+        debug(`Malformed history line: ${(e as Error).message}`);
+      }
     }
-  } catch {}
+  } catch (e) {
+    debug(`Cannot read history file: ${(e as Error).message}`);
+  }
 
   // Clean up placeholders
   for (const [, session] of sessions) {
@@ -438,7 +495,8 @@ async function enrichFromFiles(
       let files: string[];
       try {
         files = (await readdir(dirPath)).filter((f) => f.endsWith(".jsonl"));
-      } catch {
+      } catch (e) {
+        debug(`Cannot read ${dir}: ${(e as Error).message}`);
         continue;
       }
 
@@ -505,7 +563,9 @@ async function enrichFromFiles(
                   userMessages.push(entry.message.content.slice(0, 200));
                 }
               }
-            } catch {}
+            } catch (e) {
+              debug(`Malformed session line in ${sessionId}: ${(e as Error).message}`);
+            }
           }
 
           const existing = sessions.get(sessionId);
@@ -533,10 +593,14 @@ async function enrichFromFiles(
               gitBranch: gitBranch,
             });
           }
-        } catch {}
+        } catch (e) {
+          debug(`Cannot process session ${sessionId}: ${(e as Error).message}`);
+        }
       }
     }
-  } catch {}
+  } catch (e) {
+    debug(`Cannot read projects dir: ${(e as Error).message}`);
+  }
 }
 
 // Phase 3: Generate summaries — skip sessions with existing GOOD summaries
@@ -560,8 +624,15 @@ async function generateSummaries(
 
   if (needsSummary.length === 0) return summaries;
 
+  if (!process.env.ANTHROPIC_API_KEY) {
+    process.stderr.write(
+      `[session] ${needsSummary.length} sessions need summaries but ANTHROPIC_API_KEY is not set\n`
+    );
+    return summaries;
+  }
+
   const total = needsSummary.length;
-  process.stderr.write(`Summarizing ${total} sessions with Haiku...\n`);
+  process.stderr.write(`Summarizing ${total} sessions with ${SUMMARY_MODEL}...\n`);
 
   const BATCH_SIZE = 10;
   let done = 0;
@@ -590,9 +661,9 @@ async function generateSummaries(
 }
 
 export async function buildIndex(force = false): Promise<SessionEntry[]> {
-  const [historyMtime, sessionFileCount] = await Promise.all([
+  const [historyMtime, fingerprint] = await Promise.all([
     getHistoryMtime(),
-    countSessionFiles(),
+    getSessionFilesFingerprint(),
   ]);
 
   if (!force) {
@@ -600,7 +671,8 @@ export async function buildIndex(force = false): Promise<SessionEntry[]> {
     if (
       cache &&
       cache.meta.historyMtime === historyMtime &&
-      cache.meta.sessionFileCount === sessionFileCount
+      cache.meta.sessionFileCount === fingerprint.count &&
+      cache.meta.maxSessionMtime === fingerprint.maxMtime
     ) {
       // Apply names to cached sessions
       const names = await loadNames();
@@ -635,7 +707,12 @@ export async function buildIndex(force = false): Promise<SessionEntry[]> {
   }
 
   await saveCache({
-    meta: { historyMtime, sessionFileCount, builtAt: Date.now() },
+    meta: {
+      historyMtime,
+      sessionFileCount: fingerprint.count,
+      maxSessionMtime: fingerprint.maxMtime,
+      builtAt: Date.now(),
+    },
     sessions: entries,
   });
 

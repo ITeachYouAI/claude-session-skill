@@ -81,7 +81,32 @@ Names are stored separately from summaries. Names never get overwritten by index
 
 ## Install
 
-Copy to `~/.claude/skills/session/`. Claude Code will discover it automatically via SKILL.md triggers.
+```bash
+git clone https://github.com/ITeachYouAI/claude-session-skill.git ~/.claude/skills/session
+bun run ~/.claude/skills/session/session.ts rebuild
+```
+
+Claude Code will discover it automatically via SKILL.md triggers.
+
+## Configuration
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `ANTHROPIC_API_KEY` | (required) | API key for generating session summaries |
+| `SESSION_SUMMARY_MODEL` | `claude-haiku-4-5-20251001` | Model used for summarization |
+| `SESSION_DEBUG` | unset | Set to any value to enable debug logging to stderr |
+
+## Development
+
+```bash
+git clone https://github.com/ITeachYouAI/claude-session-skill.git
+cd claude-session-skill
+bun install           # Install dev dependencies (bun-types, typescript)
+bun test              # Run test suite
+bun x tsc --noEmit    # Type check
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full contributor guidelines.
 
 ## License
 

@@ -1,0 +1,42 @@
+{
+  "name": "claude-session-skill",
+  "version": "1.0.0",
+  "description": "Search, browse, and resume past Claude Code sessions with AI-generated summaries",
+  "author": "ITeachYouAI <engineering@iteachyouai.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ITeachYouAI/claude-session-skill.git"
+  },
+  "homepage": "https://github.com/ITeachYouAI/claude-session-skill",
+  "bugs": {
+    "url": "https://github.com/ITeachYouAI/claude-session-skill/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "session",
+    "search",
+    "cli",
+    "bun",
+    "anthropic",
+    "ai",
+    "developer-tools"
+  ],
+  "type": "module",
+  "main": "session.ts",
+  "scripts": {
+    "start": "bun run session.ts",
+    "test": "bun test",
+    "typecheck": "bun x tsc --noEmit",
+    "list": "bun run session.ts list",
+    "rebuild": "bun run session.ts rebuild"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
