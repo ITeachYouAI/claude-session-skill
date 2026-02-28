@@ -2,6 +2,13 @@
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for searching, browsing, and naming past sessions. Indexes all session history and generates AI summaries so you can find any session by keyword, project, or name.
 
+This package ships two ways to use the same session index:
+
+- **Claude Code skill** — install via `git clone`, use `/session` commands directly in Claude Code
+- **MCP server** — install via `npm`, connect any MCP-compatible client (Claude Desktop, Cursor, etc.)
+
+Both read from the same `~/.claude/` session data. Use whichever fits your workflow.
+
 ## Requirements
 
 - [Bun](https://bun.sh) runtime
@@ -73,15 +80,84 @@ Names are 1–50 characters. Named sessions rank highest in search results. Clea
 | Within 24 hours | 1.5× recency boost |
 | Within 7 days | 1.2× recency boost |
 
+## Resuming sessions
+
+Every session view (list, search, detail) prints a ready-to-run resume command:
+
+```
+Resume:   cd /path/to/project && claude --resume <session-id>
+```
+
+**Why the `cd`?** `claude --resume` is directory-scoped — it only searches for sessions stored under the project folder matching your *current* working directory. Running it from the wrong directory returns `No conversation found` even with a valid session ID. Always run the full `cd ... && claude --resume ...` command as printed.
+
+## MCP Server
+
+`claude-session-skill` ships a Model Context Protocol (MCP) server so any MCP-compatible client (Claude Desktop, Cursor, etc.) can search sessions without using the CLI skill.
+
+### Install (via npm)
+
+```bash
+npm install -g claude-session-skill
+# or run without installing:
+bunx claude-session-mcp
+```
+
+### Claude Desktop config
+
+```json
+{
+  "mcpServers": {
+    "claude-session": {
+      "command": "bunx",
+      "args": ["claude-session-mcp"],
+      "env": {
+        "ANTHROPIC_API_KEY": "<your-key>"
+      }
+    }
+  }
+}
+```
+
+Or with the global install:
+
+```json
+{
+  "mcpServers": {
+    "claude-session": {
+      "command": "claude-session-mcp"
+    }
+  }
+}
+```
+
+### Available tools
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `list_sessions` | `limit?: number` | List recent sessions with AI summaries |
+| `search_sessions` | `query: string` | Search by keyword or quoted phrase |
+| `show_session` | `id: string` | Detailed view of a specific session |
+| `name_session` | `id?: string, name: string` | Assign a memorable name to a session |
+| `unname_session` | `id?: string` | Remove a session's name |
+| `session_stats` | — | Statistics broken down by project |
+
+### Verify with MCP Inspector
+
+```bash
+bunx @modelcontextprotocol/inspector bun mcp-server.ts
+```
+
 ## File structure
 
 ```
 session.ts              # CLI entry point
+mcp-server.ts           # MCP server entry point (6 tools)
 lib/
   indexer.ts            # Index builder, summarizer, name persistence
   search.ts             # Weighted keyword search
   format.ts             # Terminal output formatting
   __tests__/            # Unit tests (bun:test)
+dist/                   # Built Node-compatible bundles (gitignored)
 SKILL.md                # Skill manifest and Claude instructions
 data/                   # Auto-generated, gitignored
   index.json            # Cached session index
