@@ -28,13 +28,19 @@ Claude Code stores session transcripts as JSONL files but provides no way to sea
 
 ## How naming works
 
-You speak natural language to Claude. Claude resolves which session you mean.
+You speak natural language. Claude resolves which session you mean — you never type or see session IDs.
 
-- "Name this session Vault Reorg" — Claude names the current session
-- "Name the session where I fixed the gateway" — Claude searches, finds it, names it
-- After `/session list`, "name the second one Infra Fix" — Claude grabs the ID
+| What you say | What happens |
+|---|---|
+| "Name this session Vault Reorg" | Names the most recent session |
+| "Call this session Infra Fix" | Same — names current session |
+| "Name the session where I fixed the gateway" | Claude searches, finds it, names it by ID |
+| "Name my last session Auth Refactor" | Names most recent session |
+| After `/session list`: "name the third one Deploy Fix" | Claude uses the ID from the list output |
+| "Unname the clinic bot session" | Claude searches, finds it, clears the name |
+| "Clear the name from this session" | Clears name from most recent session |
 
-Names show as `Name — AI summary` in list view:
+Names display as `Name — AI summary` in list and search views:
 
 ```
 cr a1b2c3d4...    42 msgs | Feb 27, 2:30 PM
@@ -42,7 +48,30 @@ cr a1b2c3d4...    42 msgs | Feb 27, 2:30 PM
   Left off: "commit and push"
 ```
 
-Named sessions rank highest in search results.
+And in detail view:
+
+```
+cr a1b2c3d4ef567890
+
+Name:     Vault Reorg
+Project:  YNG
+CWD:      /Users/tim/YNG
+Messages: 42
+Started:  Feb 27, 2:15 PM
+Last:     Feb 27, 2:30 PM
+
+What was done:
+- Built 10-phase vault reorganization system
+- Moved 1.3GB videos outside git-tracked area
+- Archived 13 stale projects
+- Updated CLAUDE.md with new directory structure
+- Committed and pushed 9 commits
+```
+
+**Rules:**
+- Names are 1–50 characters. Claude will ask you to shorten if longer.
+- Names are searchable — `/session search "Vault Reorg"` ranks named sessions highest.
+- Clearing a name with `unname` removes the name but keeps the AI summary.
 
 ## Architecture
 
