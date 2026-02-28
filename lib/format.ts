@@ -70,7 +70,7 @@ export function formatSessionList(sessions: SessionEntry[], showAll: boolean): s
       ? s.lastMessage
       : "";
 
-    lines.push(`cr ${s.id}    ${msgs.padStart(7)} | ${date}`);
+    lines.push(`${s.id}    ${msgs.padStart(7)} | ${date}`);
     lines.push(`  ${truncate(label, 100)}`);
     if (lastMsg) {
       lines.push(`  Left off: "${truncate(lastMsg, 90)}"`);
@@ -99,7 +99,7 @@ export function formatSearchResults(sessions: SessionEntry[], query: string): st
       ? s.lastMessage
       : "";
 
-    lines.push(`cr ${s.id}    ${msgs.padStart(7)} | ${date}`);
+    lines.push(`${s.id}    ${msgs.padStart(7)} | ${date}`);
     lines.push(`  ${truncate(label, 100)}`);
     if (lastMsg) {
       lines.push(`  Left off: "${truncate(lastMsg, 90)}"`);
@@ -116,7 +116,7 @@ export function formatSearchResults(sessions: SessionEntry[], query: string): st
 export function formatSessionDetail(session: SessionEntry): string {
   const s = session;
   const lines: string[] = [];
-  lines.push(`cr ${s.id}\n`);
+  lines.push(`${s.id}\n`);
   if (s.name) {
     lines.push(`Name:     ${s.name}`);
   }
