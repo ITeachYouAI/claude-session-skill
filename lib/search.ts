@@ -74,8 +74,8 @@ export function searchSessions(
     scored.push({ session, score });
   }
 
-  // Sort by score desc, then by lastTimestamp desc
-  scored.sort((a, b) => b.score - a.score || b.session.lastTimestamp - a.session.lastTimestamp);
+  // Sort by most recent first (timestamp desc). Score only determines inclusion, not order.
+  scored.sort((a, b) => b.session.lastTimestamp - a.session.lastTimestamp);
 
   return scored.map((s) => s.session);
 }
