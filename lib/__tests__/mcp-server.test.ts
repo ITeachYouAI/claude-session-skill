@@ -3,8 +3,9 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 /**
- * mcp-server.ts is a thin dispatcher — all business logic lives in
- * indexer.ts, search.ts, and format.ts (covered by their own test suites).
+ * mcp-server.ts is a thin entry point that calls createServer() from
+ * lib/create-server.ts. All handler logic lives in create-server.ts,
+ * with business logic in indexer.ts, search.ts, and format.ts.
  *
  * These tests verify:
  * 1. The version is read from package.json (not hardcoded)
@@ -13,7 +14,8 @@ import { join } from "path";
  */
 
 const ROOT = join(import.meta.dir, "../..");
-const serverSource = readFileSync(join(ROOT, "mcp-server.ts"), "utf-8");
+const entrySource = readFileSync(join(ROOT, "mcp-server.ts"), "utf-8");
+const serverSource = readFileSync(join(ROOT, "lib", "create-server.ts"), "utf-8");
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
 
 describe("mcp-server", () => {
@@ -46,8 +48,15 @@ describe("mcp-server", () => {
   });
 
   test("never uses console.log (would corrupt JSON-RPC stdio)", () => {
-    // Remove comments before checking
-    const noComments = serverSource.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-    expect(noComments).not.toContain("console.log");
+    // Check both the entry point and the server factory
+    for (const src of [entrySource, serverSource]) {
+      const noComments = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      expect(noComments).not.toContain("console.log");
+    }
+  });
+
+  test("entry point uses createServer factory", () => {
+    expect(entrySource).toContain("createServer");
+    expect(entrySource).toContain("StdioServerTransport");
   });
 });
