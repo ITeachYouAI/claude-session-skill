@@ -1,0 +1,3 @@
+{"type": "user", "cwd": "/Users/tim/projects/app", "gitBranch": "feat/login", "message": {"role": "user", "content": "Fix the login bug please"}, "timestamp": "2024-03-01T12:00:00Z"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "I will fix the login bug by updating the auth handler to properly validate tokens."}]}, "timestamp": "2024-03-01T12:00:05Z"}
+{"type": "user", "cwd": "/Users/tim/projects/app", "gitBranch": "feat/login", "message": {"role": "user", "content": "Can you also add unit tests for this?"}, "timestamp": "2024-03-01T12:01:00Z"}

@@ -1,4 +1,4 @@
-import { readdir, stat, mkdir, rename, unlink } from "fs/promises";
+import { readdir, stat, mkdir, rename, unlink, readFile, writeFile, open } from "fs/promises";
 import { join, basename } from "path";
 
 const HOME = process.env.HOME;
@@ -90,6 +90,27 @@ export function isGarbageSummary(s: string): boolean {
   );
 }
 
+// Resolve a partial or full session ID to a unique SessionEntry.
+// Returns { ok: true, match } on success, { ok: false, error } on ambiguous/not-found.
+export function resolveSession(
+  sessions: SessionEntry[],
+  id: string
+): { ok: true; match: SessionEntry } | { ok: false; error: string } {
+  const matches = sessions.filter(
+    (s) => s.id === id || s.id.startsWith(id)
+  );
+  if (matches.length === 0) {
+    return { ok: false, error: `No session found matching "${id}"` };
+  }
+  // Exact match always wins even when multiple prefix matches exist
+  const exact = matches.find((s) => s.id === id);
+  if (exact) return { ok: true, match: exact };
+  if (matches.length > 1) {
+    return { ok: false, error: `Ambiguous prefix "${id}" matches ${matches.length} sessions. Provide more characters.` };
+  }
+  return { ok: true, match: matches[0] };
+}
+
 async function getHistoryMtime(): Promise<number> {
   try {
     return (await stat(HISTORY_FILE)).mtimeMs;
@@ -135,7 +156,7 @@ async function getSessionFilesFingerprint(): Promise<SessionFilesFingerprint> {
 
 async function loadCache(): Promise<CacheFile | null> {
   try {
-    const raw = JSON.parse(await Bun.file(CACHE_FILE).text());
+    const raw = JSON.parse(await readFile(CACHE_FILE, "utf-8"));
     if (!raw?.meta || !Array.isArray(raw?.sessions)) return null;
     return raw as CacheFile;
   } catch {
@@ -145,7 +166,7 @@ async function loadCache(): Promise<CacheFile | null> {
 
 async function atomicWrite(path: string, data: string): Promise<void> {
   const tmp = path + ".tmp";
-  await Bun.write(tmp, data);
+  await writeFile(tmp, data);
   await rename(tmp, path);
 }
 
@@ -156,7 +177,7 @@ async function saveCache(data: CacheFile): Promise<void> {
 
 async function loadSummaries(): Promise<SummariesCache> {
   try {
-    return JSON.parse(await Bun.file(SUMMARIES_FILE).text());
+    return JSON.parse(await readFile(SUMMARIES_FILE, "utf-8"));
   } catch {
     return {};
   }
@@ -177,7 +198,7 @@ async function loadNames(): Promise<NamesCache> {
   try {
     const currentMtime = (await stat(NAMES_FILE)).mtimeMs;
     if (_namesCache && currentMtime === _namesMtime) return { ..._namesCache };
-    const raw = JSON.parse(await Bun.file(NAMES_FILE).text());
+    const raw = JSON.parse(await readFile(NAMES_FILE, "utf-8"));
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
     const cleaned: NamesCache = {};
     for (const [k, v] of Object.entries(raw)) {
@@ -207,7 +228,9 @@ async function acquireLock(): Promise<boolean> {
   while (Date.now() - start < LOCK_TIMEOUT) {
     try {
       // O_EXCL semantics — fails if file exists
-      await Bun.write(LOCK_FILE, String(process.pid), { createNew: true } as any);
+      const fh = await open(LOCK_FILE, "wx");
+      await fh.write(String(process.pid));
+      await fh.close();
       return true;
     } catch {
       // Check if lock is stale (older than 10s)
@@ -236,14 +259,9 @@ export async function nameSession(sessionId: string, name: string): Promise<{ ok
   const cache = await loadCache();
   if (!cache) return { ok: false, error: "No index found. Run `/session list` first." };
 
-  // Resolve partial ID — reject if ambiguous
-  const matches = cache.sessions.filter(
-    (s) => s.id === sessionId || s.id.startsWith(sessionId)
-  );
-  if (matches.length === 0) return { ok: false, error: `No session found matching "${sessionId}"` };
-  if (matches.length > 1) return { ok: false, error: `Ambiguous prefix "${sessionId}" matches ${matches.length} sessions. Provide more characters.` };
-
-  const match = matches[0];
+  const resolved = resolveSession(cache.sessions, sessionId);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+  const match = resolved.match;
 
   // Advisory lock to prevent concurrent write corruption
   const locked = await acquireLock();
@@ -264,13 +282,9 @@ export async function clearSessionName(sessionId: string): Promise<{ ok: boolean
   const cache = await loadCache();
   if (!cache) return { ok: false, error: "No index found. Run `/session list` first." };
 
-  const matches = cache.sessions.filter(
-    (s) => s.id === sessionId || s.id.startsWith(sessionId)
-  );
-  if (matches.length === 0) return { ok: false, error: `No session found matching "${sessionId}"` };
-  if (matches.length > 1) return { ok: false, error: `Ambiguous prefix "${sessionId}" matches ${matches.length} sessions. Provide more characters.` };
-
-  const match = matches[0];
+  const resolved = resolveSession(cache.sessions, sessionId);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+  const match = resolved.match;
 
   const locked = await acquireLock();
   if (!locked) return { ok: false, error: "Could not acquire lock." };
@@ -419,7 +433,7 @@ async function parseHistory(): Promise<Map<string, SessionEntry>> {
   const sessions = new Map<string, SessionEntry>();
 
   try {
-    const raw = await Bun.file(HISTORY_FILE).text();
+    const raw = await readFile(HISTORY_FILE, "utf-8");
     const lines = raw.split("\n").filter(Boolean);
 
     for (const line of lines) {
@@ -508,16 +522,14 @@ async function enrichFromFiles(
           const fileInfo = await stat(filePath);
           const fileSize = fileInfo.size;
 
-          // Read first 10KB (for cwd/branch) + last 50KB (for actual work done)
-          const fd = Bun.file(filePath);
           let text: string;
           if (fileSize <= 60000) {
-            text = await fd.text();
+            text = await readFile(filePath, "utf-8");
           } else {
-            const buf = await fd.arrayBuffer();
-            const decoder = new TextDecoder();
-            const first = decoder.decode(new Uint8Array(buf, 0, 10000));
-            const last = decoder.decode(new Uint8Array(buf, fileSize - 50000));
+            // For large files, read all and take first 10KB + last 50KB (by chars)
+            const allText = await readFile(filePath, "utf-8");
+            const first = allText.slice(0, 10000);
+            const last = allText.slice(-50000);
             text = first + "\n" + last;
           }
 

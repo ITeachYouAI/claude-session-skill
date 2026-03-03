@@ -1,5 +1,8 @@
 # claude-session-skill
 
+[![npm version](https://img.shields.io/npm/v/claude-session-skill)](https://www.npmjs.com/package/claude-session-skill)
+[![license](https://img.shields.io/github/license/ITeachYouAI/claude-session-skill)](LICENSE)
+
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for searching, browsing, and naming past sessions. Indexes all session history and generates AI summaries so you can find any session by keyword, project, or name.
 
 This package ships two ways to use the same session index:

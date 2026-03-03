@@ -22,7 +22,11 @@ cd claude-session-skill
 bun run session.ts help
 ```
 
-No `npm install` needed — this project has zero dependencies.
+```bash
+bun install
+```
+
+This installs the runtime dependencies (`@modelcontextprotocol/sdk`, `zod`).
 
 ### Running Type Checks
 
@@ -84,7 +88,7 @@ data/               # Auto-generated, gitignored
 
 ### Key Design Decisions
 
-- **Zero dependencies** — Only Bun built-ins + `fetch` for the Anthropic API. No package.json deps.
+- **Minimal dependencies** — Only `@modelcontextprotocol/sdk` (for the MCP server) and `zod` (schema validation). All other functionality uses Bun/Node built-ins + `fetch` for the Anthropic API.
 - **Bun-only** — Uses `Bun.file()` and `Bun.write()`. Not compatible with Node.js.
 - **Cache-first** — Index rebuilds only when `history.jsonl` mtime or session file count changes.
 - **Summaries persist separately** — `summaries.json` survives index rebuilds so you don't re-summarize old sessions.

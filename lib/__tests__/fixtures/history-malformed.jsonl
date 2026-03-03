@@ -1,0 +1,4 @@
+{"sessionId": "valid001validid1", "display": "Valid entry one", "project": "/Users/tim/app", "timestamp": 1709000000000}
+not valid json at all
+{"sessionId": "valid002validid2", "display": "Another valid entry here", "project": "/Users/tim/app", "timestamp": 1709001000000}
+{"broken": true

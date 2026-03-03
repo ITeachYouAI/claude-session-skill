@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { buildIndex, nameSession, clearSessionName } from "./lib/indexer";
+import { buildIndex, nameSession, clearSessionName, resolveSession } from "./lib/indexer";
 import { searchSessions } from "./lib/search";
 import {
   formatSessionList,
@@ -28,26 +28,12 @@ async function main() {
         process.exit(1);
       }
       const sessions = await buildIndex();
-      const matches = sessions.filter(
-        (s) => s.id === partial || s.id.startsWith(partial)
-      );
-      if (matches.length === 0) {
-        console.error(`No session found matching "${partial}"`);
+      const resolved = resolveSession(sessions, partial);
+      if (!resolved.ok) {
+        console.error(resolved.error);
         process.exit(1);
       }
-      if (matches.length > 1 && !matches.some((s) => s.id === partial)) {
-        console.error(`Ambiguous prefix "${partial}" matches ${matches.length} sessions:`);
-        for (const m of matches.slice(0, 5)) {
-          console.error(`  ${m.id.slice(0, 12)}  ${m.project}`);
-        }
-        if (matches.length > 5) {
-          console.error(`  ... and ${matches.length - 5} more`);
-        }
-        console.error("\nUse a longer prefix to narrow down.");
-        process.exit(1);
-      }
-      const match = matches.find((s) => s.id === partial) || matches[0];
-      console.log(formatSessionDetail(match));
+      console.log(formatSessionDetail(resolved.match));
       break;
     }
 

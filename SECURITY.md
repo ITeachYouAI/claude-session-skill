@@ -21,7 +21,7 @@ The tool uses your `ANTHROPIC_API_KEY` to call the Claude Haiku API for generati
 
 ### What Gets Sent to the API
 
-When generating summaries, the tool sends up to 4,000 characters of conversation content (user and assistant messages) per session to the Claude Haiku API. This happens:
+When generating summaries, the tool sends up to 6,000 characters of conversation content (user and assistant messages) per session to the Claude Haiku API. This happens:
 
 - On first run (for all existing sessions)
 - Incrementally for new sessions on subsequent runs
