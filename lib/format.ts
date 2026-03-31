@@ -10,6 +10,10 @@ function truncate(s: string, max: number): string {
   return chars.slice(0, max - 3).join("") + "...";
 }
 
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function formatDate(ts: number): string {
   if (!ts) return "unknown";
   const d = new Date(ts);
@@ -23,8 +27,19 @@ function formatDate(ts: number): string {
   return `${month} ${day}, ${h}:${mins} ${ampm}`;
 }
 
+function formatNameTimestamp(ts: number): string {
+  if (!ts) return "unknown";
+  const d = new Date(ts);
+  const day = d.getDate().toString().padStart(2, "0");
+  const month = (d.getMonth() + 1).toString().padStart(2, "0");
+  const year = (d.getFullYear() % 100).toString().padStart(2, "0");
+  const hours = d.getHours().toString().padStart(2, "0");
+  const minutes = d.getMinutes().toString().padStart(2, "0");
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
 // Get single-line display for list view — first bullet or last message
-function displayLine(s: SessionEntry): string {
+export function displayLine(s: SessionEntry): string {
   if (s.topic && !isGarbageSummary(s.topic)) {
     // If topic has bullets, return just the first one
     const lines = s.topic.split("\n").filter((l: string) => l.trim().length > 0);
@@ -35,6 +50,21 @@ function displayLine(s: SessionEntry): string {
   }
   if (s.lastMessage) return s.lastMessage;
   return s.firstMessage || "(no messages)";
+}
+
+export function makeAutoSessionName(s: SessionEntry, maxLength = 50): string {
+  const prefix = formatNameTimestamp(s.firstTimestamp);
+  const summary = displayLine(s);
+  const cleanSummary = normalizeWhitespace(
+    summary.startsWith("- ") ? summary.slice(2) : summary
+  ).replace(/^["']+|["']+$/g, "");
+
+  if (!cleanSummary) return prefix;
+
+  const available = maxLength - prefix.length - 1;
+  if (available <= 0) return prefix.slice(0, maxLength);
+
+  return `${prefix} ${truncate(cleanSummary, available)}`;
 }
 
 // Combine name + summary for list/search views

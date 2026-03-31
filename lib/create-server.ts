@@ -14,6 +14,7 @@ import {
   formatSearchResults,
   formatSessionDetail,
   formatStats,
+  makeAutoSessionName,
 } from "./format";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -85,6 +86,19 @@ export function createServer(): Server {
             },
           },
           required: ["name"],
+        },
+      },
+      {
+        name: "autoname_session",
+        description: "Generate a session title from its summary and prefix it with the session start time as dd/mm/yy HH:MM.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "Session ID or prefix. If omitted, names the most recent session.",
+            },
+          },
         },
       },
       {
@@ -198,6 +212,42 @@ export function createServer(): Server {
               {
                 type: "text",
                 text: `Named session ${(result.fullId ?? "").slice(0, 8)}... → "${sessionName}"`,
+              },
+            ],
+          };
+        }
+
+        case "autoname_session": {
+          const sessions = await buildIndex();
+          if (sessions.length === 0) {
+            return {
+              content: [{ type: "text", text: "Error: No sessions found." }],
+              isError: true,
+            };
+          }
+
+          const sessionId = args?.id ? String(args.id).trim() : sessions[0].id;
+          const resolved = resolveSession(sessions, sessionId);
+          if (!resolved.ok) {
+            return {
+              content: [{ type: "text", text: `Error: ${resolved.error}` }],
+              isError: true,
+            };
+          }
+
+          const generatedName = makeAutoSessionName(resolved.match);
+          const result = await nameSession(resolved.match.id, generatedName);
+          if (!result.ok) {
+            return {
+              content: [{ type: "text", text: `Error: ${result.error}` }],
+              isError: true,
+            };
+          }
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Named session ${(result.fullId ?? "").slice(0, 8)}... → "${generatedName}"`,
               },
             ],
           };

@@ -7,6 +7,7 @@ import {
   formatSearchResults,
   formatSessionDetail,
   formatStats,
+  makeAutoSessionName,
 } from "./lib/format";
 
 const args = process.argv.slice(2);
@@ -88,6 +89,31 @@ async function main() {
       break;
     }
 
+    case "autoname": {
+      const rest = args.slice(1);
+      const sessions = await buildIndex();
+      if (sessions.length === 0) {
+        console.error("No sessions found.");
+        process.exit(1);
+      }
+
+      const sessionId = rest[0] ?? sessions[0].id;
+      const resolved = resolveSession(sessions, sessionId);
+      if (!resolved.ok) {
+        console.error(resolved.error);
+        process.exit(1);
+      }
+
+      const generatedName = makeAutoSessionName(resolved.match);
+      const result = await nameSession(resolved.match.id, generatedName);
+      if (!result.ok) {
+        console.error(result.error);
+        process.exit(1);
+      }
+      console.log(`Named session ${(result.fullId ?? "").slice(0, 8)}... → "${generatedName}"`);
+      break;
+    }
+
     case "unname":
     case "clear-name": {
       const rest = args.slice(1);
@@ -155,6 +181,7 @@ async function main() {
   session show <id>        Show session details (partial ID ok)
   session name <name>      Name the most recent session
   session name <id> <name> Name a specific session (partial ID ok)
+  session autoname [<id>]  Name a session from its summary + start time
   session unname [<id>]    Clear a session's name
   session search <query>   Search sessions by keyword
   session rebuild          Force rebuild the index

@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.8] - 2026-03-31
+
+### Added
+
+- **`/session autoname`** — generates session titles from summaries with a `dd/mm/yy HH:MM` prefix
+- **`autoname_session` MCP tool** — mirrors the CLI autoname behavior for MCP clients
+
+### Changed
+
+- **README / SKILL docs** — clarified that “name + summarize” should generate timestamped titles
+- **Tests** — added coverage for timestamped autoname formatting and MCP tool exposure
+
 ## [1.1.7] - 2026-03-03
 
 ### Added

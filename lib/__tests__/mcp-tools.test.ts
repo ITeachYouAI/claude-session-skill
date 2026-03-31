@@ -101,6 +101,10 @@ function mockFormatStats(sessions: SessionEntry[]): string {
   return `STATS:${sessions.length} sessions`;
 }
 
+function mockMakeAutoSessionName(session: SessionEntry): string {
+  return `31/03/26 04:14 ${session.firstMessage.slice(0, 18)}`;
+}
+
 // ─── Server factory with injected mocks ────────────────────────────────
 
 interface MockDeps {
@@ -161,6 +165,16 @@ function createTestServer(deps: MockDeps): Server {
             name: { type: "string" as const, description: "Name to assign." },
           },
           required: ["name"],
+        },
+      },
+      {
+        name: "autoname_session",
+        description: "Generate a timestamped name from the session summary.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            id: { type: "string" as const, description: "Session ID." },
+          },
         },
       },
       {
@@ -271,6 +285,42 @@ function createTestServer(deps: MockDeps): Server {
               {
                 type: "text",
                 text: `Named session ${(result.fullId ?? "").slice(0, 8)}... → "${sessionName}"`,
+              },
+            ],
+          };
+        }
+
+        case "autoname_session": {
+          const sessions = deps.sessions;
+          if (sessions.length === 0) {
+            return {
+              content: [{ type: "text", text: "Error: No sessions found." }],
+              isError: true,
+            };
+          }
+
+          const sessionId = args?.id ? String(args.id).trim() : sessions[0].id;
+          const resolved = mockResolveSession(sessions, sessionId);
+          if (!resolved.ok) {
+            return {
+              content: [{ type: "text", text: `Error: ${resolved.error}` }],
+              isError: true,
+            };
+          }
+
+          const generatedName = mockMakeAutoSessionName(resolved.match);
+          const result = await deps.nameSessionFn(resolved.match.id, generatedName);
+          if (!result.ok) {
+            return {
+              content: [{ type: "text", text: `Error: ${result.error}` }],
+              isError: true,
+            };
+          }
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Named session ${(result.fullId ?? "").slice(0, 8)}... → "${generatedName}"`,
               },
             ],
           };
@@ -404,11 +454,12 @@ describe("MCP tool handlers (InMemoryTransport)", () => {
   // ── list_tools ────────────────────────────────────────────────────
 
   describe("list_tools", () => {
-    test("returns all 6 tools", async () => {
+    test("returns all 7 tools", async () => {
       const result = await client.listTools();
-      expect(result.tools).toHaveLength(6);
+      expect(result.tools).toHaveLength(7);
       const names = result.tools.map(t => t.name).sort();
       expect(names).toEqual([
+        "autoname_session",
         "list_sessions",
         "name_session",
         "search_sessions",
@@ -444,6 +495,12 @@ describe("MCP tool handlers (InMemoryTransport)", () => {
       const result = await client.listTools();
       const nameTool = result.tools.find(t => t.name === "name_session");
       expect(nameTool?.inputSchema.required).toEqual(["name"]);
+    });
+
+    test("autoname_session has no required params", async () => {
+      const result = await client.listTools();
+      const tool = result.tools.find(t => t.name === "autoname_session");
+      expect(tool?.inputSchema.required).toBeUndefined();
     });
 
     test("session_stats has no required params", async () => {
@@ -676,6 +733,42 @@ describe("MCP tool handlers (InMemoryTransport)", () => {
       });
       expect(getText(result)).toContain("Named session");
       expect(getText(result)).toContain("cccccccc");
+    });
+  });
+
+  // ── autoname_session ──────────────────────────────────────────────
+
+  describe("autoname_session", () => {
+    test("names the most recent session when no ID given", async () => {
+      const result = await client.callTool({
+        name: "autoname_session",
+        arguments: {},
+      });
+      expect(getText(result)).toContain("Named session");
+      expect(getText(result)).toContain("aaaaaaaa");
+      expect(getText(result)).toContain("31/03/26 04:14");
+      expect(result.isError).toBeFalsy();
+    });
+
+    test("names a session with explicit ID", async () => {
+      const result = await client.callTool({
+        name: "autoname_session",
+        arguments: { id: "cccccccc" },
+      });
+      expect(getText(result)).toContain("Named session");
+      expect(getText(result)).toContain("cccccccc");
+      expect(getText(result)).toContain("31/03/26 04:14");
+      expect(result.isError).toBeFalsy();
+    });
+
+    test("returns error for non-existent session ID", async () => {
+      const result = await client.callTool({
+        name: "autoname_session",
+        arguments: { id: "deadbeef-0000-0000-0000-000000000000" },
+      });
+      expect(getText(result)).toContain("Error:");
+      expect(getText(result)).toContain("No session found");
+      expect(result.isError).toBe(true);
     });
   });
 

@@ -26,6 +26,7 @@ triggers:
 /session show <id>               # Full details (supports partial IDs)
 /session name <name>             # Name the most recent session (by last activity)
 /session name <id> <name>        # Name a specific session by ID
+/session autoname [<id>]         # Generate title from summary + session start time
 /session unname [<id>]           # Clear a session's name
 /session rebuild                 # Force rebuild the index
 /session stats                   # Index statistics by project
@@ -51,6 +52,15 @@ Entry point: `bun run ~/.claude/skills/session/session.ts <command> [args]`
 3. **Do NOT ask follow-up questions** after `list` or `search`. The output is self-contained.
 4. **If the user references an already-shown list** (e.g., "the most recent", "the third one", "that one") — use the IDs already printed in the previous output. Do NOT re-run `list` or `show` unnecessarily.
 
+### Name + summarize requests
+
+If the user asks you to **"name + summarize"** a session, or otherwise wants a generated title based on the session itself:
+
+1. Use `session.ts autoname [<id>]` instead of asking them for a manual title.
+2. The generated session name MUST start with the session start timestamp in this exact format: `dd/mm/yy HH:MM`
+3. The rest of the title should be a concise summary derived from the session's summary or first bullet.
+4. Keep the final title within the existing 50-character limit.
+
 ### Naming Sessions
 
 Users name sessions in natural language. They will NEVER type IDs. Your job is to resolve which session they mean.
@@ -62,10 +72,12 @@ Users name sessions in natural language. They will NEVER type IDs. Your job is t
 3. **"Name my last session X"** — Run: `session.ts name "<name>"` (defaults to most recent by last activity)
 4. **After `/session list`**, user says **"name the third one X"** — You already have the list output with IDs. Use the ID from the third entry.
 5. **"Clear the name from X"** / **"Unname the clinic bot session"** — Search to find it, then run: `session.ts unname <id>`. Or `session.ts unname` to clear the most recent.
+6. **"Name + summarize this session"** / **"Summarize and title that one"** — Run: `session.ts autoname` (or `session.ts autoname <id>` if the target session is already known)
 
 **Key rules:**
 - The user NEVER types or sees session IDs. You handle all ID resolution behind the scenes.
 - Names are 1-50 characters. If the user gives something longer, ask them to shorten it.
+- Auto-generated names for name+summarize requests MUST include the session start time prefix in `dd/mm/yy HH:MM` format.
 - Named sessions show as `Name — summary` in list view and `Name: X` in detail view.
 - Names are searchable — `/session search "Vault Reorg"` finds named sessions with highest relevance.
 - Names can be cleared with `unname` — this removes the name but preserves the AI summary.

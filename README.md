@@ -35,6 +35,7 @@ Claude Code discovers the skill automatically via `SKILL.md` triggers. Open any 
 /session show <id>               # Show full session details (partial IDs work)
 /session name <name>             # Name the most recent session
 /session name <id> <name>        # Name a specific session by ID
+/session autoname [<id>]         # Generate title from summary + session start time
 /session unname [<id>]           # Clear a session's name
 /session search <query>          # Search by keyword
 /session <query>                 # Shorthand for search
@@ -51,7 +52,11 @@ Session naming is handled via natural language — you never type or see session
 | "Name this session `<name>`" | Names the most recent session |
 | "Name the session where I did `<thing>`" | Claude searches, finds it, names it |
 | After `/session list`: "name the second one `<name>`" | Claude uses the ID from the list output |
+| "Name + summarize that one" | Claude runs `autoname` and creates a timestamped title |
 | "Unname the `<name>` session" | Claude searches, finds it, clears the name |
+
+When Claude auto-generates a title from the session summary, the title is prefixed with the
+session start time in `dd/mm/yy HH:MM` format, for example `31/03/26 03:18 Infra fix`.
 
 Names are 1–50 characters. Named sessions rank highest in search results. Clearing a name with `unname` preserves the AI summary.
 
@@ -141,6 +146,7 @@ Or with the global install:
 | `search_sessions` | `query: string` | Search by keyword or quoted phrase |
 | `show_session` | `id: string` | Detailed view of a specific session |
 | `name_session` | `id?: string, name: string` | Assign a memorable name to a session |
+| `autoname_session` | `id?: string` | Generate a timestamped title from the session summary |
 | `unname_session` | `id?: string` | Remove a session's name |
 | `session_stats` | — | Statistics broken down by project |
 
@@ -154,7 +160,7 @@ bunx @modelcontextprotocol/inspector bun mcp-server.ts
 
 ```
 session.ts              # CLI entry point
-mcp-server.ts           # MCP server entry point (6 tools)
+mcp-server.ts           # MCP server entry point (7 tools)
 lib/
   indexer.ts            # Index builder, summarizer, name persistence
   search.ts             # Weighted keyword search

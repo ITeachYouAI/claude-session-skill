@@ -29,12 +29,13 @@ describe("mcp-server", () => {
     expect(serverSource).toContain('name: "claude-session"');
   });
 
-  test("declares all 6 expected tools", () => {
+  test("declares all 7 expected tools", () => {
     const expectedTools = [
       "list_sessions",
       "search_sessions",
       "show_session",
       "name_session",
+      "autoname_session",
       "unname_session",
       "session_stats",
     ];

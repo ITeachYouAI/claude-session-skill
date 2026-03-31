@@ -4,6 +4,7 @@ import {
   formatSearchResults,
   formatSessionDetail,
   formatStats,
+  makeAutoSessionName,
 } from "../format";
 import type { SessionEntry } from "../indexer";
 
@@ -179,6 +180,38 @@ describe("formatStats", () => {
     const bigIdx = output.indexOf("big");
     const smallIdx = output.indexOf("small");
     expect(bigIdx).toBeLessThan(smallIdx);
+  });
+});
+
+describe("makeAutoSessionName", () => {
+  test("prefixes name with dd/mm/yy HH:MM timestamp", () => {
+    const name = makeAutoSessionName(
+      makeSession({
+        firstTimestamp: new Date("2026-03-31T04:14:00Z").getTime(),
+      })
+    );
+
+    expect(name).toMatch(/^\d{2}\/\d{2}\/\d{2} \d{2}:\d{2} /);
+  });
+
+  test("uses summary text after timestamp prefix", () => {
+    const name = makeAutoSessionName(
+      makeSession({
+        topic: "- Fixed authentication bug in login flow",
+      })
+    );
+
+    expect(name).toContain("Fixed authentication bug");
+  });
+
+  test("stays within 50 characters", () => {
+    const name = makeAutoSessionName(
+      makeSession({
+        topic: `- ${"x".repeat(200)}`,
+      })
+    );
+
+    expect(Array.from(name).length).toBeLessThanOrEqual(50);
   });
 });
 
